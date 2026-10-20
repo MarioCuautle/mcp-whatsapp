@@ -120,6 +120,10 @@ func Open(dir string) (*Store, error) {
 		db.Close()
 		return nil, fmt.Errorf("apply labels schema: %w", err)
 	}
+	if err := migrateLabels(db); err != nil {
+		db.Close()
+		return nil, err
+	}
 	// Tighten messages.db after schema has been applied (the file exists
 	// by then). IsNotExist-tolerate in case a future sqlite driver version
 	// defers file creation.

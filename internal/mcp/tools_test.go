@@ -11,8 +11,11 @@ import (
 var expectedToolNames = []string{
 	"block_contact",
 	"create_group",
+	"create_label",
+	"delete_label",
 	"delete_message",
 	"download_media",
+	"edit_label",
 	"edit_message",
 	"get_blocklist",
 	"get_chat",
@@ -24,6 +27,7 @@ var expectedToolNames = []string{
 	"get_privacy_settings",
 	"get_status",
 	"is_on_whatsapp",
+	"label_chat",
 	"join_group_with_link",
 	"leave_group",
 	"list_chats",
@@ -54,6 +58,7 @@ var expectedToolNames = []string{
 	"set_privacy_setting",
 	"set_status_message",
 	"unblock_contact",
+	"unlabel_chat",
 	"update_group_participants",
 }
 
@@ -120,7 +125,7 @@ func TestNewServer_RegistersAllTools(t *testing.T) {
 
 func TestNewServer_ToolCount(t *testing.T) {
 	s := NewServer(nil, nil)
-	const want = 46
+	const want = 51
 	if got := len(s.MCP().ListTools()); got != want {
 		t.Errorf("tool count = %d, want %d", got, want)
 	}

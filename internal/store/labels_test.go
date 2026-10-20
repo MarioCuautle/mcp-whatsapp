@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"database/sql"
 	"testing"
 )
 
@@ -20,10 +21,10 @@ func TestLabels_RoundTrip(t *testing.T) {
 	s := openLabelsStore(t)
 	ctx := context.Background()
 
-	if err := s.UpsertLabel(ctx, "1", "Cliente VIP", 3, false); err != nil {
+	if err := s.UpsertLabel(ctx, "1", "Cliente VIP", 3, false, false); err != nil {
 		t.Fatal(err)
 	}
-	if err := s.UpsertLabel(ctx, "2", "Pendiente", 5, false); err != nil {
+	if err := s.UpsertLabel(ctx, "2", "Pendiente", 5, false, false); err != nil {
 		t.Fatal(err)
 	}
 	alice := "447700000001@s.whatsapp.net"
@@ -88,13 +89,13 @@ func TestLabels_RoundTrip(t *testing.T) {
 func TestLabels_DeletedAndAmbiguous(t *testing.T) {
 	s := openLabelsStore(t)
 	ctx := context.Background()
-	_ = s.UpsertLabel(ctx, "1", "Dup", 0, false)
-	_ = s.UpsertLabel(ctx, "2", "dup", 0, false)
+	_ = s.UpsertLabel(ctx, "1", "Dup", 0, false, false)
+	_ = s.UpsertLabel(ctx, "2", "dup", 0, false, false)
 	if _, err := s.ResolveLabel(ctx, "DUP"); err == nil {
 		t.Fatal("expected ambiguity error")
 	}
 	_ = s.SetChatLabel(ctx, "2", "447700000001@s.whatsapp.net", true)
-	_ = s.UpsertLabel(ctx, "2", "dup", 0, true) // deleted
+	_ = s.UpsertLabel(ctx, "2", "dup", 0, true, false) // deleted
 	if labels, _ := s.ListLabels(ctx); len(labels) != 1 {
 		t.Fatalf("deleted label still listed: %+v", labels)
 	}
@@ -113,5 +114,55 @@ func TestMeta(t *testing.T) {
 	_ = s.SetMeta(ctx, "k", "2")
 	if v, _ := s.GetMeta(ctx, "k"); v != "2" {
 		t.Fatalf("got %q", v)
+	}
+}
+
+func TestNextLabelID_NeverReusesDeleted(t *testing.T) {
+	s := openLabelsStore(t)
+	ctx := context.Background()
+	if id, err := s.NextLabelID(ctx); err != nil || id != "1" {
+		t.Fatalf("empty table: %q %v", id, err)
+	}
+	_ = s.UpsertLabel(ctx, "3", "a", 0, false, false)
+	_ = s.UpsertLabel(ctx, "25", "b", 0, true, false) // deleted ids still count
+	_ = s.UpsertLabel(ctx, "weird", "c", 0, false, false)
+	if id, err := s.NextLabelID(ctx); err != nil || id != "26" {
+		t.Fatalf("got %q %v, want 26", id, err)
+	}
+}
+
+func TestLabels_ImmutableFlagRoundTrip(t *testing.T) {
+	s := openLabelsStore(t)
+	ctx := context.Background()
+	_ = s.UpsertLabel(ctx, "1", "Unread", 0, false, true)
+	_ = s.UpsertLabel(ctx, "9", "Mine", 2, false, false)
+	l, err := s.ResolveLabel(ctx, "Unread")
+	if err != nil || l == nil || !l.Immutable {
+		t.Fatalf("immutable not stored: %+v %v", l, err)
+	}
+	if l, _ := s.ResolveLabel(ctx, "Mine"); l == nil || l.Immutable {
+		t.Fatalf("mutable label flagged immutable: %+v", l)
+	}
+}
+
+func TestMigrateLabels_AddsImmutableToLegacyTable(t *testing.T) {
+	db, err := sql.Open("sqlite3", "file:migrate_labels_legacy?mode=memory&cache=shared")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	db.SetMaxOpenConns(1)
+	if _, err := db.Exec(`CREATE TABLE labels (id TEXT PRIMARY KEY, name TEXT NOT NULL DEFAULT '', color INTEGER NOT NULL DEFAULT 0, deleted BOOLEAN NOT NULL DEFAULT 0);
+		INSERT INTO labels (id, name) VALUES ('7', 'Old');`); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ { // idempotent
+		if err := migrateLabels(db); err != nil {
+			t.Fatalf("migrate run %d: %v", i, err)
+		}
+	}
+	var imm bool
+	if err := db.QueryRow("SELECT immutable FROM labels WHERE id = '7'").Scan(&imm); err != nil || imm {
+		t.Fatalf("immutable after migration: %v %v", imm, err)
 	}
 }

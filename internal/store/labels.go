@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"strconv"
 	"strings"
 )
 
@@ -14,7 +15,8 @@ CREATE TABLE IF NOT EXISTS labels (
 	id TEXT PRIMARY KEY,
 	name TEXT NOT NULL DEFAULT '',
 	color INTEGER NOT NULL DEFAULT 0,
-	deleted BOOLEAN NOT NULL DEFAULT 0
+	deleted BOOLEAN NOT NULL DEFAULT 0,
+	immutable BOOLEAN NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS chat_labels (
@@ -35,14 +37,44 @@ type Label struct {
 	Name      string `json:"name"`
 	Color     int    `json:"color"`
 	ChatCount int    `json:"chat_count"`
+	Immutable bool   `json:"immutable,omitempty"` // built-in label that WhatsApp does not let you edit or delete
+}
+
+// migrateLabels brings a labels table created before the immutable column
+// existed up to date. Idempotent.
+func migrateLabels(db *sql.DB) error {
+	rows, err := db.Query("PRAGMA table_info(labels)")
+	if err != nil {
+		return fmt.Errorf("pragma table_info(labels): %w", err)
+	}
+	has := false
+	for rows.Next() {
+		var cid, notnull, pk int
+		var name, ctype string
+		var dflt sql.NullString
+		if err := rows.Scan(&cid, &name, &ctype, &notnull, &dflt, &pk); err != nil {
+			rows.Close()
+			return err
+		}
+		if name == "immutable" {
+			has = true
+		}
+	}
+	rows.Close()
+	if !has {
+		if _, err := db.Exec("ALTER TABLE labels ADD COLUMN immutable BOOLEAN NOT NULL DEFAULT 0"); err != nil {
+			return fmt.Errorf("add labels.immutable: %w", err)
+		}
+	}
+	return nil
 }
 
 // UpsertLabel stores or updates a label definition.
-func (s *Store) UpsertLabel(ctx context.Context, id, name string, color int, deleted bool) error {
+func (s *Store) UpsertLabel(ctx context.Context, id, name string, color int, deleted, immutable bool) error {
 	_, err := s.db.ExecContext(ctx, `
-		INSERT INTO labels (id, name, color, deleted) VALUES (?, ?, ?, ?)
-		ON CONFLICT(id) DO UPDATE SET name = excluded.name, color = excluded.color, deleted = excluded.deleted`,
-		id, name, color, deleted)
+		INSERT INTO labels (id, name, color, deleted, immutable) VALUES (?, ?, ?, ?, ?)
+		ON CONFLICT(id) DO UPDATE SET name = excluded.name, color = excluded.color, deleted = excluded.deleted, immutable = excluded.immutable`,
+		id, name, color, deleted, immutable)
 	if err != nil {
 		return fmt.Errorf("upsert label: %w", err)
 	}
@@ -71,10 +103,10 @@ func (s *Store) SetChatLabel(ctx context.Context, labelID, chatJID string, label
 // ListLabels returns every non-deleted label, ordered by name.
 func (s *Store) ListLabels(ctx context.Context) ([]Label, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT l.id, l.name, l.color, COUNT(cl.chat_jid)
+		SELECT l.id, l.name, l.color, l.immutable, COUNT(cl.chat_jid)
 		FROM labels l LEFT JOIN chat_labels cl ON cl.label_id = l.id
 		WHERE l.deleted = 0
-		GROUP BY l.id, l.name, l.color
+		GROUP BY l.id, l.name, l.color, l.immutable
 		ORDER BY LOWER(l.name), l.id`)
 	if err != nil {
 		return nil, fmt.Errorf("list labels: %w", err)
@@ -83,7 +115,7 @@ func (s *Store) ListLabels(ctx context.Context) ([]Label, error) {
 	labels := []Label{}
 	for rows.Next() {
 		var l Label
-		if err := rows.Scan(&l.ID, &l.Name, &l.Color, &l.ChatCount); err != nil {
+		if err := rows.Scan(&l.ID, &l.Name, &l.Color, &l.Immutable, &l.ChatCount); err != nil {
 			return nil, err
 		}
 		labels = append(labels, l)
@@ -259,4 +291,28 @@ func (s *Store) SetMeta(ctx context.Context, key, value string) error {
 		INSERT INTO meta (key, value) VALUES (?, ?)
 		ON CONFLICT(key) DO UPDATE SET value = excluded.value`, key, value)
 	return err
+}
+
+// NextLabelID returns an unused numeric label id: one more than the largest
+// numeric id ever seen, deleted labels included, so an id is never reused.
+func (s *Store) NextLabelID(ctx context.Context) (string, error) {
+	rows, err := s.db.QueryContext(ctx, "SELECT id FROM labels")
+	if err != nil {
+		return "", fmt.Errorf("next label id: %w", err)
+	}
+	defer rows.Close()
+	max := 0
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return "", err
+		}
+		if n, err := strconv.Atoi(id); err == nil && n > max {
+			max = n
+		}
+	}
+	if err := rows.Err(); err != nil {
+		return "", err
+	}
+	return strconv.Itoa(max + 1), nil
 }
