@@ -23,4 +23,7 @@ func (s *Server) registerTools() {
 
 	// Phase 2 — polls + contact cards.
 	s.registerMediaTools()
+
+	// WhatsApp Business labels (read-only).
+	s.registerLabelTools()
 }
