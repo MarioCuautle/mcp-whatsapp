@@ -4,6 +4,8 @@ import (
 	"context"
 	"strings"
 	"testing"
+
+	"go.mau.fi/whatsmeow/proto/waSyncAction"
 )
 
 func TestLabelWrite_NotConnected(t *testing.T) {
@@ -57,5 +59,32 @@ func TestValidateLabelColor(t *testing.T) {
 		if err := validateLabelColor(bad); err == nil {
 			t.Fatalf("%d must fail", bad)
 		}
+	}
+}
+
+func TestIsBuiltinLabel(t *testing.T) {
+	typ := func(v waSyncAction.LabelEditAction_ListType) *waSyncAction.LabelEditAction {
+		return &waSyncAction.LabelEditAction{Type: &v}
+	}
+	for _, v := range []waSyncAction.LabelEditAction_ListType{
+		waSyncAction.LabelEditAction_UNREAD, waSyncAction.LabelEditAction_GROUPS, waSyncAction.LabelEditAction_FAVORITES,
+	} {
+		if !isBuiltinLabel(typ(v)) {
+			t.Fatalf("%v must be built in", v)
+		}
+	}
+	for _, v := range []waSyncAction.LabelEditAction_ListType{
+		waSyncAction.LabelEditAction_NONE, waSyncAction.LabelEditAction_CUSTOM, waSyncAction.LabelEditAction_PREDEFINED,
+	} {
+		if isBuiltinLabel(typ(v)) {
+			t.Fatalf("%v must be editable", v)
+		}
+	}
+	imm := true
+	if !isBuiltinLabel(&waSyncAction.LabelEditAction{IsImmutable: &imm}) {
+		t.Fatal("IsImmutable must win")
+	}
+	if isBuiltinLabel(nil) {
+		t.Fatal("nil action is not built in")
 	}
 }
