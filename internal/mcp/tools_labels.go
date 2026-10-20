@@ -42,7 +42,7 @@ type listChatsByLabelArgs struct {
 
 func (s *Server) registerListChatsByLabel() {
 	tool := mcp.NewTool("list_chats_by_label",
-		mcp.WithDescription(offlineSafePrefix+"List the chats that carry a given WhatsApp Business label, most recently active first. Read-only. The label may be given by id or by name (case-insensitive; an ambiguous name returns an error asking for the id). Labels attach to chats, so a contact with no chat has no label. Returns a JSON array of chat objects."),
+		mcp.WithDescription(offlineSafePrefix+"List the chats that carry a given WhatsApp Business label, most recently active first. Read-only. The label may be given by id or by name (case-insensitive; an ambiguous name returns an error asking for the id). Labels attach to chats, so a contact with no chat has no label. Includes labelled chats that are not in the local message cache (cached=false; name from the address book when known, otherwise only the JID). Returns a JSON array of chat objects."),
 		mcp.WithString("label", mcp.Required(), mcp.Description("label id or name, as returned by list_labels")),
 		mcp.WithNumber("limit", mcp.Description("max chats to return (default 20)")),
 		mcp.WithNumber("page", mcp.Description("zero-based page number (default 0)")),

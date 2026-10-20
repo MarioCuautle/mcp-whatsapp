@@ -57,6 +57,21 @@ func TestLabels_RoundTrip(t *testing.T) {
 	if err != nil || len(chats) != 1 || chats[0].JID != alice {
 		t.Fatalf("ListChatsByLabel: %+v %v", chats, err)
 	}
+	// A labelled chat that is not in the message cache is still returned.
+	ghost := "447799999999@s.whatsapp.net"
+	if err := s.SetChatLabel(ctx, "1", ghost, true); err != nil {
+		t.Fatal(err)
+	}
+	chats, err = s.ListChatsByLabel(ctx, "1", 10, 0, false)
+	if err != nil || len(chats) != 2 || !chats[0].Cached || chats[1].Cached || chats[1].JID != ghost {
+		t.Fatalf("uncached labelled chat not returned: %+v %v", chats, err)
+	}
+	if page, _ := s.ListChatsByLabel(ctx, "1", 1, 1, false); len(page) != 1 || page[0].JID != ghost {
+		t.Fatalf("paging over combined list: %+v", page)
+	}
+	if err := s.SetChatLabel(ctx, "1", ghost, false); err != nil {
+		t.Fatal(err)
+	}
 	got, err := s.LabelsForChat(ctx, alice)
 	if err != nil || len(got) != 1 || got[0].ID != "1" {
 		t.Fatalf("LabelsForChat: %+v %v", got, err)

@@ -118,19 +118,73 @@ func (s *Store) ResolveLabel(ctx context.Context, idOrName string) (*Label, erro
 	return nil, fmt.Errorf("label name %q is ambiguous (%d matches); use the label id", idOrName, len(byName))
 }
 
-// ListChatsByLabel returns the chats carrying the given label, most recently
-// active first.
-func (s *Store) ListChatsByLabel(ctx context.Context, labelID string, limit, page int, includeLastMessage bool) ([]Chat, error) {
+// LabeledChat is a chat carrying a label. Cached is false when the chat has
+// no row in the local message cache (WhatsApp labels many chats that never
+// produced cached messages); in that case Name comes from the synced address
+// book when known and may be empty.
+type LabeledChat struct {
+	Chat
+	Cached bool `json:"cached"`
+}
+
+// ListChatsByLabel returns every chat carrying the given label: cached chats
+// first (most recently active first), then labelled chats absent from the
+// cache. limit/page apply to the combined list.
+func (s *Store) ListChatsByLabel(ctx context.Context, labelID string, limit, page int, includeLastMessage bool) ([]LabeledChat, error) {
 	if limit <= 0 {
 		limit = 20
 	}
 	if page < 0 {
 		page = 0
 	}
+	cached, err := s.queryCachedLabeledChats(ctx, labelID, includeLastMessage)
+	if err != nil {
+		return nil, err
+	}
+	seen := make(map[string]bool, len(cached))
+	all := make([]LabeledChat, 0, len(cached))
+	for _, c := range cached {
+		seen[c.JID] = true
+		all = append(all, LabeledChat{Chat: c, Cached: true})
+	}
+
+	rows, err := s.db.QueryContext(ctx, "SELECT chat_jid FROM chat_labels WHERE label_id = ? ORDER BY chat_jid", labelID)
+	if err != nil {
+		return nil, fmt.Errorf("list label associations: %w", err)
+	}
+	defer rows.Close()
+	for rows.Next() {
+		var jid string
+		if err := rows.Scan(&jid); err != nil {
+			return nil, err
+		}
+		if seen[jid] {
+			continue
+		}
+		c := Chat{JID: jid, Name: s.addressBookName(ctx, jid), IsGroup: strings.HasSuffix(jid, "@g.us")}
+		c.PhoneNumber = s.ResolveJIDToPhone(jid)
+		all = append(all, LabeledChat{Chat: c, Cached: false})
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+
+	start := page * limit
+	if start >= len(all) {
+		return []LabeledChat{}, nil
+	}
+	end := start + limit
+	if end > len(all) {
+		end = len(all)
+	}
+	return all[start:end], nil
+}
+
+func (s *Store) queryCachedLabeledChats(ctx context.Context, labelID string, includeLastMessage bool) ([]Chat, error) {
 	q := chatSelectSQL("chats", includeLastMessage) +
 		" WHERE chats.jid IN (SELECT chat_jid FROM chat_labels WHERE label_id = ?)" +
-		" ORDER BY chats.last_message_time DESC LIMIT ? OFFSET ?"
-	rows, err := s.db.QueryContext(ctx, q, labelID, limit, page*limit)
+		" ORDER BY chats.last_message_time DESC"
+	rows, err := s.db.QueryContext(ctx, q, labelID)
 	if err != nil {
 		return nil, fmt.Errorf("list chats by label: %w", err)
 	}
@@ -145,6 +199,26 @@ func (s *Store) ListChatsByLabel(ctx context.Context, labelID string, limit, pag
 		result = append(result, c)
 	}
 	return result, rows.Err()
+}
+
+// addressBookName returns the best synced contact name for a JID, or "".
+func (s *Store) addressBookName(ctx context.Context, jid string) string {
+	if s.whatsmeowDB == nil {
+		return ""
+	}
+	var full, push, biz sql.NullString
+	err := s.whatsmeowDB.QueryRowContext(ctx,
+		"SELECT full_name, push_name, business_name FROM whatsmeow_contacts WHERE their_jid = ? LIMIT 1", jid).
+		Scan(&full, &push, &biz)
+	if err != nil {
+		return ""
+	}
+	for _, v := range []sql.NullString{full, biz, push} {
+		if v.Valid && v.String != "" {
+			return v.String
+		}
+	}
+	return ""
 }
 
 // LabelsForChat returns the non-deleted labels attached to a chat.
