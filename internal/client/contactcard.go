@@ -73,6 +73,10 @@ func parseVCard(vcard string) (name string, phones []string) {
 			continue
 		}
 		prop, params, _ := strings.Cut(key, ";")
+		// vCard allows a group prefix ("item1.TEL"); WhatsApp on iOS emits it.
+		if i := strings.LastIndex(prop, "."); i >= 0 {
+			prop = prop[i+1:]
+		}
 		switch strings.ToUpper(strings.TrimSpace(prop)) {
 		case "FN":
 			if name == "" {

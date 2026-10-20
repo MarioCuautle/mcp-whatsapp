@@ -87,3 +87,12 @@ func TestContactCard_ArrayIsCapped(t *testing.T) {
 		t.Fatalf("not capped: %q", got)
 	}
 }
+
+func TestParseVCard_GroupPrefixedProperties(t *testing.T) {
+	// iOS-style vCard: properties carry a group prefix ("item1.TEL").
+	v := "BEGIN:VCARD\nVERSION:3.0\nN:Example;Alice;;;\nFN:Alice Example\nitem1.TEL;waid=447700900001:+44 7700 900001\nitem1.X-ABLabel:Mobile\nEND:VCARD"
+	name, phones := parseVCard(v)
+	if name != "Alice Example" || len(phones) != 1 || phones[0] != "+447700900001" {
+		t.Fatalf("got name=%q phones=%v", name, phones)
+	}
+}
