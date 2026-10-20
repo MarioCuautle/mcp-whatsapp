@@ -22,7 +22,7 @@ func TestListChatsByLabelPaginationOverflowThroughReadOnlyMCP(t *testing.T) {
 	defer st.Close()
 
 	const labelID = "1"
-	if err := st.UpsertLabel(context.Background(), labelID, "Lead", 0, false); err != nil {
+	if err := st.UpsertLabel(context.Background(), labelID, "Lead", 0, false, false); err != nil {
 		t.Fatal(err)
 	}
 	if err := st.SetChatLabel(context.Background(), labelID, "447700000001@s.whatsapp.net", true); err != nil {

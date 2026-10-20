@@ -7,13 +7,14 @@ import (
 	"github.com/mark3labs/mcp-go/mcp"
 )
 
-// registerLabelTools wires read-only tools for WhatsApp Business labels.
+// registerLabelTools wires the WhatsApp Business label tools: read-only lookups plus write tools.
 // Labels are attached to chats, so lookups return chats, not contacts.
 func (s *Server) registerLabelTools() {
 	s.registerListLabels()
 	s.registerListChatsByLabel()
 	s.registerGetChatLabels()
 	s.registerResyncLabels()
+	s.registerLabelWriteTools()
 }
 
 func (s *Server) registerListLabels() {
@@ -114,4 +115,147 @@ func (s *Server) registerResyncLabels() {
 		}
 		return mcp.NewToolResultText("Labels resynced"), nil
 	})
+}
+
+// registerLabelWriteTools wires the tools that change labels on the account.
+// They sync to the phone through app state, so they only work while connected.
+func (s *Server) registerLabelWriteTools() {
+	s.registerLabelChat()
+	s.registerUnlabelChat()
+	s.registerCreateLabel()
+	s.registerEditLabel()
+	s.registerDeleteLabel()
+}
+
+type labelChatArgs struct {
+	Chat  string `json:"chat"`
+	Label string `json:"label"`
+}
+
+func (s *Server) registerLabelChat() {
+	s.registerLabelAssignment("label_chat", true,
+		"Attach a WhatsApp Business label to a chat. Idempotent; reversible with unlabel_chat. Changes the account's labels on the phone. The label may be an id or a name from list_labels. Returns the plain-text string `Labelled <chat> with <label>`.")
+}
+
+func (s *Server) registerUnlabelChat() {
+	s.registerLabelAssignment("unlabel_chat", false,
+		"Remove a WhatsApp Business label from a chat. Idempotent; reversible with label_chat. Changes the account's labels on the phone. The label may be an id or a name from list_labels. Returns the plain-text string `Removed <label> from <chat>`.")
+}
+
+func (s *Server) registerLabelAssignment(name string, labeled bool, desc string) {
+	tool := mcp.NewTool(name,
+		mcp.WithDescription(desc),
+		mcp.WithString("chat", mcp.Required(), mcp.Description(recipientDesc)),
+		mcp.WithString("label", mcp.Required(), mcp.Description("label id or name, as returned by list_labels")),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(true),
+	)
+	s.mcp.AddTool(tool, mcp.NewTypedToolHandler(func(ctx context.Context, _ mcp.CallToolRequest, a labelChatArgs) (*mcp.CallToolResult, error) {
+		if r := requireNonEmpty("chat", a.Chat); r != nil {
+			return r, nil
+		}
+		if r := requireNonEmpty("label", a.Label); r != nil {
+			return r, nil
+		}
+		l, err := s.client.SetChatLabel(ctx, a.Chat, a.Label, labeled)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		if labeled {
+			return mcp.NewToolResultText(fmt.Sprintf("Labelled %s with %s", a.Chat, l.Name)), nil
+		}
+		return mcp.NewToolResultText(fmt.Sprintf("Removed %s from %s", l.Name, a.Chat)), nil
+	}))
+}
+
+type createLabelArgs struct {
+	Name  string `json:"name"`
+	Color *int   `json:"color"`
+}
+
+func (s *Server) registerCreateLabel() {
+	tool := mcp.NewTool("create_label",
+		mcp.WithDescription("Create a new WhatsApp Business label on the account (name up to 20 characters, colour index 0-19, default 0). Fails if a label with that name already exists. Changes the account's labels on the phone; reversible with delete_label. Returns a JSON object {id, name, color}."),
+		mcp.WithString("name", mcp.Required(), mcp.Description("label name, at most 20 characters")),
+		mcp.WithNumber("color", mcp.Description("colour index 0-19 (default 0)")),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(false),
+		mcp.WithOpenWorldHintAnnotation(true),
+	)
+	s.mcp.AddTool(tool, mcp.NewTypedToolHandler(func(ctx context.Context, _ mcp.CallToolRequest, a createLabelArgs) (*mcp.CallToolResult, error) {
+		if r := requireNonEmpty("name", a.Name); r != nil {
+			return r, nil
+		}
+		color := 0
+		if a.Color != nil {
+			color = *a.Color
+		}
+		l, err := s.client.CreateLabel(ctx, a.Name, color)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return resultJSON(l)
+	}))
+}
+
+type editLabelArgs struct {
+	Label string  `json:"label"`
+	Name  *string `json:"name"`
+	Color *int    `json:"color"`
+}
+
+func (s *Server) registerEditLabel() {
+	tool := mcp.NewTool("edit_label",
+		mcp.WithDescription("Rename and/or recolour an existing WhatsApp Business label (name up to 20 characters, colour index 0-19). Pass at least one of name or color. Built-in labels cannot be edited. Changes the account's labels on the phone; reversible by editing again. Returns a JSON object {id, name, color}."),
+		mcp.WithString("label", mcp.Required(), mcp.Description("label id or name, as returned by list_labels")),
+		mcp.WithString("name", mcp.Description("new name, at most 20 characters")),
+		mcp.WithNumber("color", mcp.Description("new colour index 0-19")),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(false),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(true),
+	)
+	s.mcp.AddTool(tool, mcp.NewTypedToolHandler(func(ctx context.Context, _ mcp.CallToolRequest, a editLabelArgs) (*mcp.CallToolResult, error) {
+		if r := requireNonEmpty("label", a.Label); r != nil {
+			return r, nil
+		}
+		l, err := s.client.EditLabel(ctx, a.Label, a.Name, a.Color)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return resultJSON(l)
+	}))
+}
+
+type deleteLabelArgs struct {
+	Label       string `json:"label"`
+	ConfirmName string `json:"confirm_name"`
+}
+
+func (s *Server) registerDeleteLabel() {
+	tool := mcp.NewTool("delete_label",
+		mcp.WithDescription("DESTRUCTIVE: delete a WhatsApp Business label from the account, removing it from every chat that carries it. To guard against mistakes, `confirm_name` must equal the label's current name. Built-in labels cannot be deleted. Changes the account's labels on the phone. Not reversible by this server (re-create the label and re-assign it to each chat). Returns the plain-text string `Deleted label <name>`."),
+		mcp.WithString("label", mcp.Required(), mcp.Description("label id or name, as returned by list_labels")),
+		mcp.WithString("confirm_name", mcp.Required(), mcp.Description("the label's exact current name, to confirm the deletion")),
+		mcp.WithReadOnlyHintAnnotation(false),
+		mcp.WithDestructiveHintAnnotation(true),
+		mcp.WithIdempotentHintAnnotation(true),
+		mcp.WithOpenWorldHintAnnotation(true),
+	)
+	s.mcp.AddTool(tool, mcp.NewTypedToolHandler(func(ctx context.Context, _ mcp.CallToolRequest, a deleteLabelArgs) (*mcp.CallToolResult, error) {
+		if r := requireNonEmpty("label", a.Label); r != nil {
+			return r, nil
+		}
+		if r := requireNonEmpty("confirm_name", a.ConfirmName); r != nil {
+			return r, nil
+		}
+		l, err := s.client.DeleteLabel(ctx, a.Label, a.ConfirmName)
+		if err != nil {
+			return mcp.NewToolResultError(err.Error()), nil
+		}
+		return mcp.NewToolResultText(fmt.Sprintf("Deleted label %s", l.Name)), nil
+	}))
 }
