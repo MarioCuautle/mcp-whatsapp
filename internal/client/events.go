@@ -396,7 +396,8 @@ func (c *Client) resolveChatNameFallback(ctx context.Context, jid types.JID, sen
 	return jid.User
 }
 
-// extractTextContent returns the plain-text body of a Message, if any.
+// extractTextContent returns the plain-text body of a Message, if any. Incoming
+// contact cards are rendered as text (see contactCardText).
 func extractTextContent(msg *waProto.Message) string {
 	if msg == nil {
 		return ""
@@ -407,7 +408,7 @@ func extractTextContent(msg *waProto.Message) string {
 	if ext := msg.GetExtendedTextMessage(); ext != nil {
 		return ext.GetText()
 	}
-	return ""
+	return contactCardText(msg)
 }
 
 // extractMediaInfo pulls out the storable media fields from a Message.
