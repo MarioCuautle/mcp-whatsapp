@@ -17,8 +17,11 @@ import (
 var expectedToolNames = []string{
 	"block_contact",
 	"create_group",
+	"create_label",
+	"delete_label",
 	"delete_message",
 	"download_media",
+	"edit_label",
 	"edit_message",
 	"get_blocklist",
 	"get_chat",
@@ -31,6 +34,7 @@ var expectedToolNames = []string{
 	"get_status",
 	"get_status_audience",
 	"is_on_whatsapp",
+	"label_chat",
 	"join_group_with_link",
 	"leave_group",
 	"list_chats",
@@ -63,6 +67,7 @@ var expectedToolNames = []string{
 	"set_status_message",
 	"transcribe_audio",
 	"unblock_contact",
+	"unlabel_chat",
 	"update_group_participants",
 }
 

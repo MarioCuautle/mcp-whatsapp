@@ -19,7 +19,7 @@ func (c *Client) handleLabelEdit(v *events.LabelEdit) {
 	if act == nil {
 		return
 	}
-	if err := c.store.UpsertLabel(context.Background(), v.LabelID, act.GetName(), int(act.GetColor()), act.GetDeleted()); err != nil {
+	if err := c.store.UpsertLabel(context.Background(), v.LabelID, act.GetName(), int(act.GetColor()), act.GetDeleted(), act.GetIsImmutable()); err != nil {
 		c.log.Warnf("Failed to store label %s: %v", v.LabelID, err)
 	}
 }
