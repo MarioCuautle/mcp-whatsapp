@@ -102,7 +102,7 @@ func TestLabelsPaginationOverflowFailsClosed(t *testing.T) {
 	ctx := context.Background()
 	const labelID = "overflow"
 	const chatJID = "447700000001@s.whatsapp.net"
-	if err := s.UpsertLabel(ctx, labelID, "Overflow", 0, false); err != nil {
+	if err := s.UpsertLabel(ctx, labelID, "Overflow", 0, false, false); err != nil {
 		t.Fatal(err)
 	}
 	if err := s.SetChatLabel(ctx, labelID, chatJID, true); err != nil {
