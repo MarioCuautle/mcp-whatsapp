@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"go.mau.fi/whatsmeow/appstate"
+	"go.mau.fi/whatsmeow/proto/waSyncAction"
 	"go.mau.fi/whatsmeow/types/events"
 )
 
@@ -19,7 +20,7 @@ func (c *Client) handleLabelEdit(v *events.LabelEdit) {
 	if act == nil {
 		return
 	}
-	if err := c.store.UpsertLabel(context.Background(), v.LabelID, act.GetName(), int(act.GetColor()), act.GetDeleted(), act.GetIsImmutable()); err != nil {
+	if err := c.store.UpsertLabel(context.Background(), v.LabelID, act.GetName(), int(act.GetColor()), act.GetDeleted(), isBuiltinLabel(act)); err != nil {
 		c.log.Warnf("Failed to store label %s: %v", v.LabelID, err)
 	}
 }
@@ -75,4 +76,29 @@ func (c *Client) maybeInitialLabelSync() {
 		return
 	}
 	c.log.Infof("Labels: initial resync complete")
+}
+
+// isBuiltinLabel reports whether a label is one of WhatsApp's own lists
+// (unread, groups, favourites, ...) rather than a user label: the immutable
+// flag when the server sets it, plus the system list types, which carry no
+// such flag. Custom and predefined business labels are editable.
+func isBuiltinLabel(act *waSyncAction.LabelEditAction) bool {
+	if act.GetIsImmutable() {
+		return true
+	}
+	switch act.GetType() {
+	case waSyncAction.LabelEditAction_UNREAD,
+		waSyncAction.LabelEditAction_GROUPS,
+		waSyncAction.LabelEditAction_FAVORITES,
+		waSyncAction.LabelEditAction_COMMUNITY,
+		waSyncAction.LabelEditAction_SERVER_ASSIGNED,
+		waSyncAction.LabelEditAction_DRAFTED,
+		waSyncAction.LabelEditAction_AI_HANDOFF,
+		waSyncAction.LabelEditAction_CHANNELS,
+		waSyncAction.LabelEditAction_AI_RESPONDING,
+		waSyncAction.LabelEditAction_ARCHIVED,
+		waSyncAction.LabelEditAction_LOCKED:
+		return true
+	}
+	return false
 }
