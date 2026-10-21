@@ -8,6 +8,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"sync"
 	"time"
 
 	"github.com/mdp/qrterminal"
@@ -21,6 +22,7 @@ import (
 	"github.com/sealjay/mcp-whatsapp/internal/ratelimit"
 	"github.com/sealjay/mcp-whatsapp/internal/security"
 	"github.com/sealjay/mcp-whatsapp/internal/store"
+	"github.com/sealjay/mcp-whatsapp/internal/transcribe"
 )
 
 // Config configures a new Client.
@@ -48,6 +50,11 @@ type Client struct {
 	allowedMediaRoot string
 	redactor         *security.Redactor
 	limiter          *ratelimit.Limiter
+
+	// Speech-to-text (see transcribe.go). transcribeFn is a test seam.
+	transcribeCfg transcribe.Config
+	transcribeFn  func(ctx context.Context, cfg transcribe.Config, path, language string) (transcribe.Result, error)
+	transcribeMu  sync.Mutex
 }
 
 // New constructs a Client. It sets the latest WhatsApp version best-effort,
@@ -131,6 +138,7 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 		allowedMediaRoot: cfg.AllowedMediaRoot,
 		redactor:         redactor,
 		limiter:          limiter,
+		transcribeCfg:    transcribe.ConfigFromEnv(),
 	}, nil
 }
 
