@@ -70,6 +70,10 @@ Scan the QR with WhatsApp (*Settings → Linked Devices → Link a Device*). The
 
 Restart the client. The daemon outlives client restarts.
 
+### Send rate limits
+
+Outbound sends are throttled in the daemon (defaults: 45 s between sends, 30/hour; 90 s and 15/hour to JIDs that never wrote to you; 3 `is_on_whatsapp` lookups/minute). Override per instance with `WHATSAPP_MCP_RATE_MIN_SEND_INTERVAL`, `..._MAX_SENDS_PER_HOUR`, `..._NONCONTACT_MIN_INTERVAL`, `..._NONCONTACT_MAX_PER_HOUR` and `..._MAX_USYNC_PER_MINUTE` (durations like `20s`, positive integers). An invalid value stops startup rather than silently disabling a guard. Raising the limits raises the risk of WhatsApp restricting the number.
+
 ### Sending and receiving files
 
 `WHATSAPP_MCP_MEDIA_ROOT` (default `<store>/uploads/`, created on first run) is the only directory file tools may touch:
