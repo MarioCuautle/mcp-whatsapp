@@ -104,6 +104,10 @@ Project scope writes `.mcp.json` in the project; local and user scopes are store
 
 Restart the client after changing its configuration.
 
+### Send rate limits
+
+Outbound sends are throttled in the daemon (defaults: 45 s between sends, 30/hour; 90 s and 15/hour to JIDs that never wrote to you; 3 `is_on_whatsapp` lookups/minute). Override per instance with `WHATSAPP_MCP_RATE_MIN_SEND_INTERVAL`, `..._MAX_SENDS_PER_HOUR`, `..._NONCONTACT_MIN_INTERVAL`, `..._NONCONTACT_MAX_PER_HOUR` and `..._MAX_USYNC_PER_MINUTE` (durations like `20s`, positive integers). An invalid value stops startup rather than silently disabling a guard. Raising the limits raises the risk of WhatsApp restricting the number.
+
 ### First queries
 
 Ask the client to call `get_status` (connection and pairing state) and `list_chats`. An empty chat list straight after pairing can mean initial history has not arrived yet. Keep the phone online and the daemon running to receive history and new messages. You can then explicitly request more history with `request_sync`: it needs a connected client and at least one cached message in the target chat, runs asynchronously and cannot bootstrap an empty cache.

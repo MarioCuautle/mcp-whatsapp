@@ -114,7 +114,14 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 
 	limiter := cfg.RateLimiter
 	if limiter == nil {
-		limiter = ratelimit.New(ratelimit.DefaultConfig())
+		rlCfg, overridden, err := ratelimit.ConfigFromEnv(os.Getenv)
+		if err != nil {
+			return nil, err
+		}
+		if overridden {
+			logger.Warnf("Rate limiter overridden from environment: %+v", rlCfg)
+		}
+		limiter = ratelimit.New(rlCfg)
 	}
 
 	// Pairing properties are read when the handshake is built, so they
