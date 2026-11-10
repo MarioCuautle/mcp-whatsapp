@@ -16,6 +16,7 @@ var readOnlyToolAccess = map[string]bool{
 	"get_poll_results":          true,
 	"get_privacy_settings":      true,
 	"get_status":                true,
+	"get_status_audience":       true,
 	"is_on_whatsapp":            true,
 	"join_group_with_link":      false,
 	"leave_group":               false,
@@ -27,6 +28,7 @@ var readOnlyToolAccess = map[string]bool{
 	"mark_chat_read":            false,
 	"mark_read":                 false,
 	"pairing_status":            true,
+	"post_status":               false,
 	"request_sync":              true,
 	"resync_labels":             true,
 	"search_contacts":           true,
@@ -56,6 +58,7 @@ var readOnlyToolAccess = map[string]bool{
 // Tool registrations are split by domain:
 //   - tools_query.go   — read-only data retrieval (list_chats, search_contacts, …)
 //   - tools_send.go    — outbound messages (send_message, send_file, send_reaction, …)
+//   - tools_status.go  — status (story) posts and audience (post_status, get_status_audience)
 //   - tools_message.go — message mutation & history (edit, delete, mark_read, sync, …)
 //   - tools_groups.go  — group management (create, leave, participants, settings, …)
 //   - tools_media.go   — polls + contact cards
@@ -66,6 +69,7 @@ var readOnlyToolAccess = map[string]bool{
 func (s *Server) registerTools() {
 	s.registerQueryTools()
 	s.registerSendTools()
+	s.registerStatusTools()
 	s.registerMessageTools()
 
 	// Phase 1 — group management + blocklist.

@@ -29,6 +29,7 @@ var expectedToolNames = []string{
 	"get_poll_results",
 	"get_privacy_settings",
 	"get_status",
+	"get_status_audience",
 	"is_on_whatsapp",
 	"join_group_with_link",
 	"leave_group",
@@ -40,6 +41,7 @@ var expectedToolNames = []string{
 	"mark_chat_read",
 	"mark_read",
 	"pairing_status",
+	"post_status",
 	"request_sync",
 	"resync_labels",
 	"search_contacts",
@@ -127,7 +129,7 @@ func TestNewServer_RegistersAllTools(t *testing.T) {
 
 func TestNewServer_ToolCount(t *testing.T) {
 	s := NewServer(nil, nil, true)
-	const want = 47
+	const want = 49
 	if got := len(s.MCP().ListTools()); got != want {
 		t.Errorf("tool count = %d, want %d", got, want)
 	}
@@ -140,8 +142,8 @@ func TestNewServer_LabelsDisabledDoesNotAdvertiseLabelTools(t *testing.T) {
 			t.Errorf("label tool %q is advertised while labels are disabled", name)
 		}
 	}
-	if got := len(s.MCP().ListTools()); got != 43 {
-		t.Fatalf("default tool count = %d, want 43", got)
+	if got := len(s.MCP().ListTools()); got != 45 {
+		t.Fatalf("default tool count = %d, want 45", got)
 	}
 }
 
@@ -197,6 +199,7 @@ var expectedReadOnlyTools = map[string]bool{
 	"request_sync":         true,
 	"resync_labels":        true,
 	"search_contacts":      true,
+	"get_status_audience":  true,
 }
 
 func TestReadOnlyServer_RejectsMutationTools(t *testing.T) {

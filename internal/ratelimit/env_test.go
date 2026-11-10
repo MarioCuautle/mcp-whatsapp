@@ -34,9 +34,24 @@ func TestConfigFromEnvRejectsBadValues(t *testing.T) {
 		EnvMaxSendsPerHour:       "0",
 		EnvNonContactMaxPerHour:  "ten",
 		EnvMaxUsyncPerMinute:     "-1",
+		EnvMinStatusInterval:     "0s",
+		EnvMaxStatusesPerDay:     "many",
 	} {
 		if _, _, err := ConfigFromEnv(envOf(map[string]string{name: v})); err == nil {
 			t.Errorf("%s=%q should be rejected", name, v)
 		}
+	}
+}
+
+func TestConfigFromEnvStatusOverrides(t *testing.T) {
+	cfg, changed, err := ConfigFromEnv(envOf(map[string]string{
+		EnvMinStatusInterval: "2m",
+		EnvMaxStatusesPerDay: "20",
+	}))
+	if err != nil || !changed {
+		t.Fatalf("unexpected: changed=%v err=%v", changed, err)
+	}
+	if cfg.MinStatusInterval != 2*60e9 || cfg.MaxStatusesPerDay != 20 {
+		t.Fatalf("got %+v", cfg)
 	}
 }

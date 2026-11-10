@@ -80,6 +80,10 @@ type Client struct {
 	// rate-limited sendMessage); tests replace them.
 	isConnected func() bool
 	waSend      func(context.Context, types.JID, *waProto.Message, ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error)
+	// statusPrivacyFn and statusRecipientsFn replace wa.GetStatusPrivacy and
+	// wa's status-recipient resolution in tests (see status.go).
+	statusPrivacyFn    func(context.Context) ([]types.StatusPrivacy, error)
+	statusRecipientsFn func(context.Context) ([]types.JID, error)
 }
 
 // newWAClient creates the whatsmeow client for device. whatsmeow logs through
