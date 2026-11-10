@@ -134,7 +134,7 @@ func TestNewServer_RegistersAllTools(t *testing.T) {
 
 func TestNewServer_ToolCount(t *testing.T) {
 	s := NewServer(nil, nil, true)
-	const want = 49
+	const want = 54
 	if got := len(s.MCP().ListTools()); got != want {
 		t.Errorf("tool count = %d, want %d", got, want)
 	}

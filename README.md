@@ -22,7 +22,7 @@ What you can do with it:
 - Transcribe voice notes through a speech-to-text service you configure (opt-in).
 - Run with `serve -read-only` to exclude message-sending and account-mutation tools.
 
-There are 45 tools advertised by default. That count includes `transcribe_audio`, which needs a speech-to-text endpoint before it can work. Four optional, read-only WhatsApp Business label tools bring the total to 49. See [Tools](#tools) for the full reference and the [mode table](#tool-availability-by-mode).
+There are 45 tools advertised by default. That count includes `transcribe_audio`, which needs a speech-to-text endpoint before it can work. Nine optional WhatsApp Business label tools (four read-only, five that change labels) bring the total to 54. See [Tools](#tools) for the full reference and the [mode table](#tool-availability-by-mode).
 
 > **Data sharing.** Anything read through MCP tools or resources (messages, contact names, media bytes) is available to your client, which may pass it to its model provider. Transcription uploads audio to the endpoint you configure.
 
@@ -114,13 +114,13 @@ Ask the client to call `get_status` (connection and pairing state) and `list_cha
 
 ## Tools
 
-The default set is 45 tools grouped by purpose. `-enable-labels` adds four read-only WhatsApp Business tools (49 total).
+The default set is 45 tools grouped by purpose. `-enable-labels` adds four read-only and five write WhatsApp Business label tools (54 total).
 
 ### Tool availability by mode
 
 | Mode | Labels off | Labels on |
 |---|---|---|
-| Full access (`serve`) | 45 tools | 49 tools |
+| Full access (`serve`) | 45 tools | 54 tools |
 | Read-only (`serve -read-only`) | 16 tools | 20 tools |
 
 - `transcribe_audio` is always advertised in full-access mode but works only when `WHATSAPP_MCP_TRANSCRIBE_URL` is set. It is excluded from read-only mode because it uploads private audio to another service.
@@ -155,7 +155,7 @@ For `recipient`, use phone digits without a leading `+`, spaces or punctuation, 
 
 ### WhatsApp Business labels (opt-in)
 
-Enable with `serve -enable-labels` or `WHATSAPP_MCP_LABELS=1`. Label tools are not advertised by default. When enabled, the server captures label changes and performs a one-time full app-state sync; `resync_labels` can refresh the local cache later. All four are read-only tools and are available in read-only mode. Personal accounts normally return an empty list.
+Enable with `serve -enable-labels` or `WHATSAPP_MCP_LABELS=1`. Label tools are not advertised by default. When enabled, the server captures label changes and performs a one-time full app-state sync; `resync_labels` can refresh the local cache later. The first four are read-only and available in read-only mode; the five write tools (`label_chat`, `unlabel_chat`, `create_label`, `edit_label`, `delete_label`) are not. Personal accounts normally return an empty list.
 
 | Tool | Purpose |
 |---|---|
@@ -163,6 +163,8 @@ Enable with `serve -enable-labels` or `WHATSAPP_MCP_LABELS=1`. Label tools are n
 | `list_chats_by_label` | List chats carrying a label by id or name |
 | `get_chat_labels` | List labels attached to a chat |
 | `resync_labels` | Re-fetch app state to refresh cached labels |
+| `label_chat` / `unlabel_chat` | Attach or remove a label on a chat (syncs to the phone) |
+| `create_label` / `edit_label` / `delete_label` | Create, rename/recolour or delete a label; `delete_label` needs `confirm_name`; WhatsApp's built-in lists cannot be edited. Excluded from read-only mode |
 
 ### Message actions
 
