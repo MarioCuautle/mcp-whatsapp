@@ -239,3 +239,54 @@ func TestConcurrentSends(t *testing.T) {
 		t.Fatalf("expected exactly 1 send admitted at a frozen clock, got %d", allowed)
 	}
 }
+
+func statusConfig() Config {
+	cfg := testConfig()
+	cfg.MinStatusInterval = time.Minute
+	cfg.MaxStatusesPerDay = 2
+	return cfg
+}
+
+func TestAllowStatus_IntervalAndDailyCap(t *testing.T) {
+	l, advance := newTestLimiter(t, statusConfig())
+	if d := l.AllowStatus(); !d.Allowed {
+		t.Fatalf("first status should be allowed, got %+v", d)
+	}
+	d := l.AllowStatus()
+	if d.Allowed || d.RetryAfter != time.Minute {
+		t.Fatalf("immediate second status should wait a minute, got %+v", d)
+	}
+	advance(time.Minute)
+	if d := l.AllowStatus(); !d.Allowed {
+		t.Fatalf("status after the interval should be allowed, got %+v", d)
+	}
+	advance(time.Minute)
+	d = l.AllowStatus()
+	if d.Allowed || d.Reason != "daily status post cap reached" {
+		t.Fatalf("third status should hit the daily cap, got %+v", d)
+	}
+	advance(24 * time.Hour)
+	if d := l.AllowStatus(); !d.Allowed {
+		t.Fatalf("cap should clear once the oldest post ages out, got %+v", d)
+	}
+}
+
+func TestAllowStatus_DeniedDoesNotConsumeBudget(t *testing.T) {
+	l, advance := newTestLimiter(t, statusConfig())
+	l.AllowStatus()
+	for i := 0; i < 5; i++ {
+		l.AllowStatus() // denied by the interval floor
+	}
+	advance(time.Minute)
+	if d := l.AllowStatus(); !d.Allowed {
+		t.Fatalf("denied calls must not use budget, got %+v", d)
+	}
+}
+
+func TestAllowStatus_IndependentOfSends(t *testing.T) {
+	l, _ := newTestLimiter(t, statusConfig())
+	l.AllowSend(true)
+	if d := l.AllowStatus(); !d.Allowed {
+		t.Fatalf("a recent message send must not block a status post, got %+v", d)
+	}
+}

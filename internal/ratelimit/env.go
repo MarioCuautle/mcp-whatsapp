@@ -15,6 +15,8 @@ const (
 	EnvNonContactMinInterval = "WHATSAPP_MCP_RATE_NONCONTACT_MIN_INTERVAL" // Go duration
 	EnvNonContactMaxPerHour  = "WHATSAPP_MCP_RATE_NONCONTACT_MAX_PER_HOUR" // integer
 	EnvMaxUsyncPerMinute     = "WHATSAPP_MCP_RATE_MAX_USYNC_PER_MINUTE"    // integer
+	EnvMinStatusInterval     = "WHATSAPP_MCP_RATE_MIN_STATUS_INTERVAL"     // Go duration
+	EnvMaxStatusesPerDay     = "WHATSAPP_MCP_RATE_MAX_STATUSES_PER_DAY"    // integer
 )
 
 // ConfigFromEnv returns DefaultConfig with any limits overridden from getenv
@@ -52,6 +54,8 @@ func ConfigFromEnv(getenv func(string) string) (Config, bool, error) {
 		dur(EnvNonContactMinInterval, &cfg.NonContactMinInterval),
 		num(EnvNonContactMaxPerHour, &cfg.NonContactMaxPerHour),
 		num(EnvMaxUsyncPerMinute, &cfg.MaxUsyncPerMinute),
+		dur(EnvMinStatusInterval, &cfg.MinStatusInterval),
+		num(EnvMaxStatusesPerDay, &cfg.MaxStatusesPerDay),
 	} {
 		if err != nil {
 			return Config{}, false, err

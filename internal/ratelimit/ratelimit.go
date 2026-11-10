@@ -38,6 +38,12 @@ type Config struct {
 	// minute. The original 17-way parallel fanout died on a usync 429, not a
 	// send 429 — usync has its own, tighter server-side budget.
 	MaxUsyncPerMinute int
+	// MinStatusInterval is the floor between two status (story) posts. One
+	// status is encrypted and fanned out to every contact in the audience, so
+	// it is far heavier than a single message.
+	MinStatusInterval time.Duration
+	// MaxStatusesPerDay caps status posts in any trailing 24 hours.
+	MaxStatusesPerDay int
 }
 
 // DefaultConfig returns the limits derived from the incident that motivated
@@ -50,6 +56,8 @@ func DefaultConfig() Config {
 		NonContactMinInterval: 90 * time.Second,
 		NonContactMaxPerHour:  15,
 		MaxUsyncPerMinute:     3,
+		MinStatusInterval:     5 * time.Minute,
+		MaxStatusesPerDay:     10,
 	}
 }
 
@@ -73,6 +81,7 @@ type Limiter struct {
 	nonContactSends []time.Time // non-contact sends within the trailing hour
 	usyncs          []time.Time // usync lookups within the trailing minute
 	lastSend        time.Time   // zero when no send has been recorded yet
+	statuses        []time.Time // status posts within the trailing day
 }
 
 // New returns a Limiter using the wall clock.
@@ -134,6 +143,28 @@ func (l *Limiter) AllowUsync() Decision {
 		return Decision{Allowed: false, RetryAfter: untilOldestExpires(l.usyncs, now, time.Minute), Reason: "usync burst guard (is_on_whatsapp) reached"}
 	}
 	l.usyncs = append(l.usyncs, now)
+	return Decision{Allowed: true}
+}
+
+// AllowStatus atomically checks whether a status (story) post is permitted
+// and, if so, records it. It is independent of AllowSend: a status is one
+// call but reaches the whole audience, so it has its own, stricter budget.
+// A denied decision does not consume budget.
+func (l *Limiter) AllowStatus() Decision {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	now := l.clock()
+
+	l.statuses = pruneBefore(l.statuses, now.Add(-24*time.Hour))
+	if n := len(l.statuses); n > 0 && l.cfg.MinStatusInterval > 0 {
+		if elapsed := now.Sub(l.statuses[n-1]); elapsed < l.cfg.MinStatusInterval {
+			return Decision{Allowed: false, RetryAfter: l.cfg.MinStatusInterval - elapsed, Reason: "minimum status post interval not elapsed"}
+		}
+	}
+	if l.cfg.MaxStatusesPerDay > 0 && len(l.statuses) >= l.cfg.MaxStatusesPerDay {
+		return Decision{Allowed: false, RetryAfter: untilOldestExpires(l.statuses, now, 24*time.Hour), Reason: "daily status post cap reached"}
+	}
+	l.statuses = append(l.statuses, now)
 	return Decision{Allowed: true}
 }
 
