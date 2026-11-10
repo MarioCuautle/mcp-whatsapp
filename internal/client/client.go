@@ -80,6 +80,10 @@ type Client struct {
 	// rate-limited sendMessage); tests replace them.
 	isConnected func() bool
 	waSend      func(context.Context, types.JID, *waProto.Message, ...whatsmeow.SendRequestExtra) (whatsmeow.SendResponse, error)
+	// statusPrivacyFn and statusRecipientsFn replace wa.GetStatusPrivacy and
+	// wa's status-recipient resolution in tests (see status.go).
+	statusPrivacyFn    func(context.Context) ([]types.StatusPrivacy, error)
+	statusRecipientsFn func(context.Context) ([]types.JID, error)
 }
 
 // newWAClient creates the whatsmeow client for device. whatsmeow logs through
@@ -114,7 +118,14 @@ func New(ctx context.Context, cfg Config) (*Client, error) {
 
 	limiter := cfg.RateLimiter
 	if limiter == nil {
-		limiter = ratelimit.New(ratelimit.DefaultConfig())
+		rlCfg, overridden, err := ratelimit.ConfigFromEnv(os.Getenv)
+		if err != nil {
+			return nil, err
+		}
+		if overridden {
+			logger.Warnf("Rate limiter overridden from environment: %+v", rlCfg)
+		}
+		limiter = ratelimit.New(rlCfg)
 	}
 
 	// Pairing properties are read when the handshake is built, so they

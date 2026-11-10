@@ -4,7 +4,7 @@
 [![CI](https://github.com/Sealjay/mcp-whatsapp/actions/workflows/ci.yml/badge.svg)](https://github.com/Sealjay/mcp-whatsapp/actions/workflows/ci.yml)
 [![Go 1.26+](https://img.shields.io/badge/Go-1.26%2B-00ADD8?logo=go&logoColor=white)](https://go.dev/)
 [![MCP](https://img.shields.io/badge/MCP-protocol-6366f1)](https://modelcontextprotocol.io/)
-[![43 tools](https://img.shields.io/badge/tools-43-blue)](#tools)
+[![45 tools](https://img.shields.io/badge/tools-45-blue)](#tools)
 [![whatsmeow](https://img.shields.io/badge/whatsmeow-multidevice-25D366?logo=whatsapp&logoColor=white)](https://github.com/tulir/whatsmeow)
 [![Sealjay/mcp-whatsapp MCP server](https://glama.ai/mcp/servers/Sealjay/mcp-whatsapp/badges/score.svg?)](https://glama.ai/mcp/servers/Sealjay/mcp-whatsapp)
 [![GitHub issues](https://img.shields.io/github/issues/Sealjay/mcp-whatsapp)](https://github.com/Sealjay/mcp-whatsapp/issues)
@@ -22,7 +22,7 @@ What you can do with it:
 - Transcribe voice notes through a speech-to-text service you configure (opt-in).
 - Run with `serve -read-only` to exclude message-sending and account-mutation tools.
 
-There are 43 tools advertised by default. That count includes `transcribe_audio`, which needs a speech-to-text endpoint before it can work. Four optional, read-only WhatsApp Business label tools bring the total to 47. See [Tools](#tools) for the full reference and the [mode table](#tool-availability-by-mode).
+There are 45 tools advertised by default. That count includes `transcribe_audio`, which needs a speech-to-text endpoint before it can work. Four optional, read-only WhatsApp Business label tools bring the total to 49. See [Tools](#tools) for the full reference and the [mode table](#tool-availability-by-mode).
 
 > **Data sharing.** Anything read through MCP tools or resources (messages, contact names, media bytes) is available to your client, which may pass it to its model provider. Transcription uploads audio to the endpoint you configure.
 
@@ -104,20 +104,24 @@ Project scope writes `.mcp.json` in the project; local and user scopes are store
 
 Restart the client after changing its configuration.
 
+### Send rate limits
+
+Outbound sends are throttled in the daemon (defaults: 45 s between sends, 30/hour; 90 s and 15/hour to JIDs that never wrote to you; 3 `is_on_whatsapp` lookups/minute). Override per instance with `WHATSAPP_MCP_RATE_MIN_SEND_INTERVAL`, `..._MAX_SENDS_PER_HOUR`, `..._NONCONTACT_MIN_INTERVAL`, `..._NONCONTACT_MAX_PER_HOUR` and `..._MAX_USYNC_PER_MINUTE` (durations like `20s`, positive integers). An invalid value stops startup rather than silently disabling a guard. Raising the limits raises the risk of WhatsApp restricting the number.
+
 ### First queries
 
 Ask the client to call `get_status` (connection and pairing state) and `list_chats`. An empty chat list straight after pairing can mean initial history has not arrived yet. Keep the phone online and the daemon running to receive history and new messages. You can then explicitly request more history with `request_sync`: it needs a connected client and at least one cached message in the target chat, runs asynchronously and cannot bootstrap an empty cache.
 
 ## Tools
 
-The default set is 43 tools grouped by purpose. `-enable-labels` adds four read-only WhatsApp Business tools (47 total).
+The default set is 45 tools grouped by purpose. `-enable-labels` adds four read-only WhatsApp Business tools (49 total).
 
 ### Tool availability by mode
 
 | Mode | Labels off | Labels on |
 |---|---|---|
-| Full access (`serve`) | 43 tools | 47 tools |
-| Read-only (`serve -read-only`) | 15 tools | 19 tools |
+| Full access (`serve`) | 45 tools | 49 tools |
+| Read-only (`serve -read-only`) | 16 tools | 20 tools |
 
 - `transcribe_audio` is always advertised in full-access mode but works only when `WHATSAPP_MCP_TRANSCRIBE_URL` is set. It is excluded from read-only mode because it uploads private audio to another service.
 - Read-only mode removes tools that send messages, mark messages read, publish presence or change the WhatsApp account. It still allows network access, media downloads, history requests, writes to the local cache (including label syncs), MCP resources, and the operator pairing and reset actions on `/pair`. It is not a network-isolation mode: cached queries work while disconnected, but live operations need a connection. A client can still read any cached data.
@@ -203,6 +207,8 @@ Enable with `serve -enable-labels` or `WHATSAPP_MCP_LABELS=1`. Label tools are n
 | `send_presence` | Set own availability (`available` or `unavailable`) — distinct from per-chat `send_typing` |
 | `get_privacy_settings` | Current privacy settings as JSON |
 | `set_privacy_setting` | Change one privacy setting by `name` + `value` (strict enum validation; invalid combinations are rejected) |
+| `get_status_audience` | Count who a status (story) would reach under the account's status privacy; sends nothing |
+| `post_status` | Publish a text, image or video status to the whole status audience; own stricter rate limit (`WHATSAPP_MCP_RATE_MIN_STATUS_INTERVAL`, `..._MAX_STATUSES_PER_DAY`); excluded from read-only mode |
 | `set_status_message` | Update the profile "About" text; empty string clears it |
 
 ### Admin
