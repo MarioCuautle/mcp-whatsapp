@@ -4,6 +4,11 @@ package mcp
 var readOnlyToolAccess = map[string]bool{
 	"block_contact":             false,
 	"create_group":              false,
+	"create_label":              false,
+	"delete_label":              false,
+	"edit_label":                false,
+	"label_chat":                false,
+	"unlabel_chat":              false,
 	"delete_message":            false,
 	"download_media":            true,
 	"edit_message":              false,
