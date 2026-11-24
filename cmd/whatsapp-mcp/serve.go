@@ -12,6 +12,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"syscall"
+	"time"
 
 	"github.com/sealjay/mcp-whatsapp/internal/client"
 	"github.com/sealjay/mcp-whatsapp/internal/daemon"
@@ -92,6 +93,12 @@ func runServe(storeDir string, redactor *security.Redactor, args []string) int {
 		fmt.Fprintf(os.Stderr, "resolve store dir: %v\n", err)
 		return 1
 	}
+	writeTimeout, err := resolveRequestTimeout(os.Getenv("WHATSAPP_MCP_REQUEST_TIMEOUT"))
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "WHATSAPP_MCP_REQUEST_TIMEOUT: %v\n", err)
+		return 2
+	}
+
 	allowedMediaRoot := os.Getenv("WHATSAPP_MCP_MEDIA_ROOT")
 	if allowedMediaRoot == "" {
 		allowedMediaRoot = filepath.Join(absStore, "uploads")
@@ -131,9 +138,10 @@ func runServe(storeDir string, redactor *security.Redactor, args []string) int {
 	// to the MCP server (so pairing_status can surface the live QR), then
 	// mount the MCP HTTP handler back onto the daemon.
 	d, err := daemon.New(daemon.Config{
-		Addr:      addr,
-		Driver:    drv,
-		AuthToken: authToken,
+		Addr:         addr,
+		Driver:       drv,
+		AuthToken:    authToken,
+		WriteTimeout: writeTimeout,
 	})
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "daemon.New: %v\n", err)
@@ -199,4 +207,22 @@ func isLoopbackAddr(addr string) bool {
 		}
 	}
 	return true
+}
+
+// resolveRequestTimeout parses WHATSAPP_MCP_REQUEST_TIMEOUT, the HTTP write
+// timeout. Empty keeps the daemon default (30 s), "0" removes the limit, and
+// anything else must be a positive duration such as "5m". An invalid value
+// stops startup rather than silently keeping a limit that cuts long tool calls.
+func resolveRequestTimeout(value string) (time.Duration, error) {
+	if value == "" {
+		return 0, nil
+	}
+	d, err := time.ParseDuration(value)
+	if err != nil || d < 0 {
+		return 0, fmt.Errorf("invalid duration %q (use e.g. 5m, or 0 for no limit)", value)
+	}
+	if d == 0 {
+		return -1, nil
+	}
+	return d, nil
 }

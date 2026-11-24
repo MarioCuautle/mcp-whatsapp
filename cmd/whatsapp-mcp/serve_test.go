@@ -4,6 +4,7 @@ import (
 	"os"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/sealjay/mcp-whatsapp/internal/security"
 )
@@ -67,5 +68,26 @@ func TestRunServe_RejectsInvalidLabelsEnvironment(t *testing.T) {
 	}
 	if code != 2 || !strings.Contains(string(raw), "WHATSAPP_MCP_LABELS") {
 		t.Fatalf("invalid labels config: code %d, stderr %s", code, raw)
+	}
+}
+
+func TestResolveRequestTimeout(t *testing.T) {
+	cases := []struct {
+		in      string
+		want    time.Duration
+		wantErr bool
+	}{
+		{"", 0, false},
+		{"5m", 5 * time.Minute, false},
+		{"90s", 90 * time.Second, false},
+		{"0", -1, false},
+		{"-5s", 0, true},
+		{"soon", 0, true},
+	}
+	for _, c := range cases {
+		got, err := resolveRequestTimeout(c.in)
+		if (err != nil) != c.wantErr || got != c.want {
+			t.Errorf("resolveRequestTimeout(%q) = %v, %v; want %v, err=%v", c.in, got, err, c.want, c.wantErr)
+		}
 	}
 }

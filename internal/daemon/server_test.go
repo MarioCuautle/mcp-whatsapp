@@ -278,3 +278,64 @@ func TestOriginMiddlewareAllowsMatchingOrigin(t *testing.T) {
 		t.Fatalf("status = %d, want 204", rec.Code)
 	}
 }
+
+func TestEffectiveWriteTimeout(t *testing.T) {
+	cases := []struct{ in, want time.Duration }{
+		{0, requestTimeout},
+		{-1, 0},
+		{5 * time.Minute, 5 * time.Minute},
+	}
+	for _, c := range cases {
+		if got := effectiveWriteTimeout(c.in); got != c.want {
+			t.Errorf("effectiveWriteTimeout(%v) = %v, want %v", c.in, got, c.want)
+		}
+	}
+}
+
+// slowMCPResponse runs a daemon whose /mcp handler takes 600 ms and reports
+// whether a client received the response.
+func slowMCPResponse(t *testing.T, writeTimeout time.Duration) error {
+	t.Helper()
+	s, err := New(Config{
+		Addr:         "127.0.0.1:0",
+		Driver:       newFakePairDriver(true),
+		WriteTimeout: writeTimeout,
+		MCPMount: func(mux *http.ServeMux) {
+			mux.HandleFunc("/mcp", func(w http.ResponseWriter, r *http.Request) {
+				time.Sleep(600 * time.Millisecond)
+				_, _ = w.Write([]byte("done"))
+			})
+		},
+	})
+	if err != nil {
+		t.Fatalf("daemon.New: %v", err)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() { _ = s.Run(ctx) }()
+	waitFor(t, func() bool { return s.BoundAddr() != "" }, "daemon bound")
+	resp, err := http.Post("http://"+s.BoundAddr()+"/mcp", "application/json", bytes.NewReader([]byte("{}")))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err == nil && string(body) != "done" {
+		err = errors.New("unexpected body " + string(body))
+	}
+	return err
+}
+
+func TestServer_WriteTimeoutCutsSlowCalls(t *testing.T) {
+	if err := slowMCPResponse(t, 200*time.Millisecond); err == nil {
+		t.Fatal("slow /mcp call survived a 200 ms write timeout")
+	}
+}
+
+func TestServer_WriteTimeoutCanBeRaisedOrDisabled(t *testing.T) {
+	for _, d := range []time.Duration{5 * time.Second, -1} {
+		if err := slowMCPResponse(t, d); err != nil {
+			t.Errorf("WriteTimeout %v: slow /mcp call failed: %v", d, err)
+		}
+	}
+}

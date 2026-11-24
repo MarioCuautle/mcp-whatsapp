@@ -19,6 +19,19 @@ const (
 	requestTimeout      = 30 * time.Second
 )
 
+// effectiveWriteTimeout maps Config.WriteTimeout to the http.Server value:
+// zero selects requestTimeout, a negative value disables the limit.
+func effectiveWriteTimeout(d time.Duration) time.Duration {
+	switch {
+	case d == 0:
+		return requestTimeout
+	case d < 0:
+		return 0
+	default:
+		return d
+	}
+}
+
 // pairDriver is the minimal surface the Server needs from the underlying
 // WhatsApp client. Production wiring (cmd/whatsapp-mcp/production_driver.go)
 // satisfies this via *client.Client. Tests substitute a fake.
@@ -51,6 +64,11 @@ type Config struct {
 	Driver    pairDriver
 	MCPMount  func(mux *http.ServeMux)
 	AuthToken string
+	// WriteTimeout bounds how long a response may take to be written, which
+	// includes the time a slow tool call (transcription, status posts to a
+	// large audience) spends running. Zero means the default (30 s); a
+	// negative value disables the limit.
+	WriteTimeout time.Duration
 }
 
 // Server is the long-lived daemon process. Safe for a single Run call.
@@ -146,7 +164,7 @@ func (s *Server) Run(ctx context.Context) error {
 		Handler:           rootHandler,
 		ReadHeaderTimeout: 5 * time.Second,
 		ReadTimeout:       requestTimeout,
-		WriteTimeout:      requestTimeout,
+		WriteTimeout:      effectiveWriteTimeout(s.cfg.WriteTimeout),
 		IdleTimeout:       120 * time.Second,
 	}
 	s.boundAddr = ln.Addr().String()
