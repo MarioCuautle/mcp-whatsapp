@@ -14,6 +14,9 @@ import (
 
 	mcpsrv "github.com/sealjay/mcp-whatsapp/internal/mcp"
 	"github.com/sealjay/mcp-whatsapp/internal/security"
+	"go.mau.fi/whatsmeow/proto/waCompanionReg"
+	"go.mau.fi/whatsmeow/store"
+	"google.golang.org/protobuf/proto"
 )
 
 // Version is overridden at build time via -ldflags "-X main.Version=...".
@@ -47,6 +50,11 @@ Pairing flag (after 'login' or 'serve'; only affects a new pairing):
 `
 
 func main() {
+
+	// Configurar el cliente para que aparezca como Google Chrome
+	store.DeviceProps.Os = proto.String("Chrome (Linux)")
+	platform := waCompanionReg.DeviceProps_CHROME
+	store.DeviceProps.PlatformType = &platform
 	mcpsrv.Version = strings.TrimPrefix(Version, "v")
 
 	// Handle -version / --version before subcommand dispatch so it works
